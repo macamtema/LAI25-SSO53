@@ -22,6 +22,54 @@ class _PraBencanaTabState extends ConsumerState<PraBencanaTab> {
   String? _selectedKabupaten;
   String? _selectedKecamatan;
 
+  // --- PENAMBAHAN BARU: State untuk menampung info bahaya saat ini ---
+  Map<String, dynamic>? _currentHazardInfo;
+  bool _isFetchingHazardInfo = false;
+  // --- AKHIR PENAMBAHAN BARU ---
+
+  // --- PENAMBAHAN BARU: Fungsi untuk mengambil data bahaya lokasi saat ini ---
+  Future<void> _fetchCurrentHazardInfo() async {
+    // Pastikan semua dropdown sudah terisi
+    if (_selectedBencana == null ||
+        _selectedProvinsi == null ||
+        _selectedKabupaten == null ||
+        _selectedKecamatan == null) {
+      return;
+    }
+
+    // Set state loading
+    if (mounted) {
+      setState(() {
+        _isFetchingHazardInfo = true;
+        _currentHazardInfo = null;
+      });
+    }
+
+    final db = ref.read(databaseProvider);
+    final lokasiId = await db.getLokasiId(
+      _selectedBencana!,
+      _selectedProvinsi!,
+      _selectedKabupaten!,
+      _selectedKecamatan!,
+    );
+
+    if (lokasiId != null) {
+      final details = await db.getBahayaDetails(lokasiId);
+      if (mounted) {
+        setState(() {
+          _currentHazardInfo = details;
+        });
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _isFetchingHazardInfo = false;
+      });
+    }
+  }
+  // --- AKHIR PENAMBAHAN BARU ---
+
   // Helper untuk menampilkan dialog detail
   void _showDetailsDialog(
     String title,
@@ -191,6 +239,7 @@ class _PraBencanaTabState extends ConsumerState<PraBencanaTab> {
             _selectedProvinsi = null;
             _selectedKabupaten = null;
             _selectedKecamatan = null;
+            _currentHazardInfo = null;
             ref.read(recommendationProvider.notifier).resetState();
           }),
         ),
@@ -204,6 +253,7 @@ class _PraBencanaTabState extends ConsumerState<PraBencanaTab> {
               _selectedProvinsi = value;
               _selectedKabupaten = null;
               _selectedKecamatan = null;
+              _currentHazardInfo = null;
               ref.read(recommendationProvider.notifier).resetState();
             }),
           ),
@@ -216,6 +266,7 @@ class _PraBencanaTabState extends ConsumerState<PraBencanaTab> {
             onChanged: (value) => setState(() {
               _selectedKabupaten = value;
               _selectedKecamatan = null;
+              _currentHazardInfo = null;
               ref.read(recommendationProvider.notifier).resetState();
             }),
           ),
@@ -225,18 +276,92 @@ class _PraBencanaTabState extends ConsumerState<PraBencanaTab> {
             hint: 'Pilih Kecamatan',
             value: _selectedKecamatan,
             items: kecamatanAsync,
+            // --- PERUBAHAN DI SINI ---
             onChanged: (value) {
               setState(() {
                 _selectedKecamatan = value;
               });
               ref.read(recommendationProvider.notifier).resetState();
+              if (value != null) {
+                // Panggil fungsi untuk fetch info bahaya saat ini
+                _fetchCurrentHazardInfo();
+              } else {
+                setState(() {
+                  _currentHazardInfo = null;
+                });
+              }
             },
+            // --- AKHIR PERUBAHAN ---
           ),
         const SizedBox(height: 24),
+
+        // --- PENAMBAHAN BARU: Widget untuk menampilkan info bahaya saat ini ---
+        if (_isFetchingHazardInfo)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(8.0),
+              child: CircularProgressIndicator(),
+            ),
+          )
+        else if (_currentHazardInfo != null)
+          Card(
+            margin: const EdgeInsets.only(bottom: 24.0),
+            elevation: 2,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Info Bahaya Lokasi Terpilih",
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Divider(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        "Kelas Bahaya:",
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      Chip(
+                        label: Text(
+                          _currentHazardInfo!['kelas_bahaya'] ?? 'N/A',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        backgroundColor: Colors.orange.shade100,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        "Kelas Risiko:",
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      Chip(
+                        label: Text(
+                          _currentHazardInfo!['kelas_resiko'] ?? 'N/A',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        backgroundColor: Colors.red.shade100,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        // --- AKHIR PENAMBAHAN BARU ---
         ElevatedButton.icon(
           onPressed: _getRecommendations,
           icon: const Icon(Icons.search),
-          label: const Text('Cari Rekomendasi'),
+          label: const Text('Cari Bencana Serupa'),
           style: ElevatedButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 12),
           ),

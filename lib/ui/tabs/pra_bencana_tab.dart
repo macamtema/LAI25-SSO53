@@ -221,7 +221,7 @@ class _PraBencanaTabState extends ConsumerState<PraBencanaTab> {
       padding: const EdgeInsets.all(16.0),
       children: [
         Text(
-          'Kewaspadaan Bencana',
+          'Waspada Pra-Bencana',
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 8),

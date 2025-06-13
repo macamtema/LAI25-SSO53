@@ -163,7 +163,7 @@ class _SaatBencanaTabState extends ConsumerState<SaatBencanaTab> {
       padding: const EdgeInsets.all(16.0),
       children: [
         Text(
-          'Rekomendasi Evakuasi',
+          'Evakuasi Saat Bencana',
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 8),

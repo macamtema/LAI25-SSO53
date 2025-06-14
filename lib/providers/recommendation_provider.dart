@@ -20,16 +20,12 @@ class RecommendationNotifier extends StateNotifier<RecommendationState> {
   RecommendationNotifier(this._ref) : super(const RecommendationInitial());
 
   /// **[Pra-Bencana]** Mengambil rekomendasi bencana lain dengan profil bahaya serupa.
-  ///
-  /// Memanggil TFLite service yang membutuhkan dbService sebagai helper.
+  /// Logika ini memanggil TFLite Service yang kompleks dan tidak berubah.
   Future<void> fetchPraBencana(int lokasiId) async {
     state = const RecommendationLoading();
     try {
-      // Baca instance dari tflite service dan database service
       final tfliteService = _ref.read(tfliteProvider);
       final dbService = _ref.read(databaseProvider);
-
-      // Panggil fungsi rekomendasi baru yang memerlukan dbService
       final results = await tfliteService.getPraBencanaRecommendation(
         lokasiId,
         dbService,
@@ -42,9 +38,8 @@ class RecommendationNotifier extends StateNotifier<RecommendationState> {
     }
   }
 
-  /// **[Saat-Bencana]** Mengambil rekomendasi kecamatan teraman untuk evakuasi.
-  ///
-  /// Logika ini tidak berubah, hanya memanggil database helper.
+  /// **[Saat-Bencana - Diperbarui & Disederhanakan]**
+  /// Langsung memanggil fungsi DB yang sudah melakukan ranking hierarkis secara efisien.
   Future<void> fetchSaatBencana(
     String bencana,
     String provinsi,
@@ -68,9 +63,8 @@ class RecommendationNotifier extends StateNotifier<RecommendationState> {
     }
   }
 
-  /// **[Pasca-Bencana - Mode A]** Mengambil daftar kecamatan dengan kapasitas terendah.
-  ///
-  /// Memanggil fungsi baru di database helper yang fokus pada tabel 'kapasitas'.
+  /// **[Pasca-Bencana - Diperbarui & Disederhanakan]** [Mode A]
+  /// Langsung memanggil fungsi DB yang sudah melakukan ranking hierarkis.
   Future<void> fetchPascaBencanaLokasiByCapacity(
     String bencana,
     String provinsi,
@@ -92,9 +86,8 @@ class RecommendationNotifier extends StateNotifier<RecommendationState> {
     }
   }
 
-  /// **[Pasca-Bencana - Mode B]** Mengambil daftar bencana paling berisiko berdasarkan kapasitas.
-  ///
-  /// Memanggil fungsi baru di database helper yang fokus pada tabel 'kapasitas'.
+  /// **[Pasca-Bencana - Diperbarui & Disederhanakan]** [Mode B]
+  /// Langsung memanggil fungsi DB yang sudah melakukan ranking hierarkis.
   Future<void> fetchPascaBencanaJenisByCapacity(
     String provinsi,
     String kabupaten,
@@ -117,8 +110,6 @@ class RecommendationNotifier extends StateNotifier<RecommendationState> {
   }
 
   /// Mengembalikan state ke kondisi awal.
-  ///
-  /// Berguna untuk membersihkan hasil rekomendasi sebelumnya saat pengguna mengubah input.
   void resetState() {
     state = const RecommendationInitial();
   }

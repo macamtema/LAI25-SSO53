@@ -32,7 +32,7 @@ class _HomePageState extends State<HomePage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Rekomendasi Bencana'),
+        title: const Text('Rekomendasi Fase Bencana'),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [

@@ -67,7 +67,6 @@ class DatabaseHelper {
   }
 
   /// Mengambil `lokasi_id` unik berdasarkan kombinasi lokasi yang diberikan.
-  /// Penting untuk mendapatkan input bagi model TFLite.
   Future<int?> getLokasiId(
     String bencana,
     String provinsi,
@@ -89,7 +88,6 @@ class DatabaseHelper {
   }
 
   /// Mengambil detail nama lokasi (provinsi, kabupaten, kecamatan) berdasarkan `lokasi_id`.
-  /// Digunakan untuk menampilkan hasil rekomendasi dari model TFLite.
   Future<Map<String, dynamic>?> getLokasiById(int id) async {
     final db = await database;
     final result = await db.query(
@@ -169,8 +167,6 @@ class DatabaseHelper {
   // FUNGSI UNTUK REKOMENDASI & DETAIL
   // =======================================================================
 
-  // --- Untuk Tab Pra-Bencana (Awareness) ---
-
   /// Mengambil semua detail dari tabel 'bahaya' berdasarkan lokasi_id.
   Future<Map<String, dynamic>?> getBahayaDetails(int lokasiId) async {
     final db = await database;
@@ -181,29 +177,6 @@ class DatabaseHelper {
       limit: 1,
     );
     return result.isNotEmpty ? result.first : null;
-  }
-
-  // --- Untuk Tab Saat-Bencana (Evakuasi) ---
-
-  /// Merekomendasikan 3 kecamatan teraman untuk evakuasi di kabupaten yang sama.
-  Future<List<Map<String, dynamic>>> getEvacuationRecommendation(
-    String bencana,
-    String provinsi,
-    String kabupaten,
-    String kecamatan,
-  ) async {
-    final db = await database;
-    return await db.rawQuery(
-      '''
-      SELECT l.id, l.kecamatan, k.total_penduduk_terpapar
-      FROM lokasi l
-      JOIN kerentanan k ON l.id = k.lokasi_id
-      WHERE l.bencana = ? AND l.provinsi = ? AND l.kabupaten = ? AND l.kecamatan != ?
-      ORDER BY k.total_penduduk_terpapar ASC, k.total_kerugian_fisik_dan_ekonomi ASC
-      LIMIT 3
-    ''',
-      [bencana, provinsi, kabupaten, kecamatan],
-    );
   }
 
   /// Mengambil semua detail dari tabel 'kerentanan' berdasarkan lokasi_id.
@@ -218,48 +191,6 @@ class DatabaseHelper {
     return result.isNotEmpty ? result.first : null;
   }
 
-  // --- Untuk Tab Pasca-Bencana (Rehabilitasi) ---
-
-  /// Rehabilitasi [Mode A]: Mencari kecamatan dengan kapasitas terendah untuk bencana tertentu.
-  Future<List<Map<String, dynamic>>> getLowestCapacityKecamatan(
-    String bencana,
-    String provinsi,
-    String kabupaten,
-  ) async {
-    final db = await database;
-    return await db.rawQuery(
-      '''
-        SELECT l.id, l.kecamatan, cap.indeks_kapasitas
-        FROM lokasi l
-        JOIN kapasitas cap ON l.id = cap.lokasi_id
-        WHERE l.bencana = ? AND l.provinsi = ? AND l.kabupaten = ?
-        ORDER BY cap.indeks_kapasitas ASC
-        LIMIT 5
-    ''',
-      [bencana, provinsi, kabupaten],
-    );
-  }
-
-  /// Rehabilitasi [Mode B]: Mencari bencana yang paling berisiko (kapasitas terendah) untuk lokasi tertentu.
-  Future<List<Map<String, dynamic>>> getBencanaByLowestCapacity(
-    String provinsi,
-    String kabupaten,
-    String kecamatan,
-  ) async {
-    final db = await database;
-    return await db.rawQuery(
-      '''
-        SELECT l.id, l.bencana, cap.indeks_kapasitas
-        FROM lokasi l
-        JOIN kapasitas cap ON l.id = cap.lokasi_id
-        WHERE l.provinsi = ? AND l.kabupaten = ? AND l.kecamatan = ?
-        ORDER BY cap.indeks_kapasitas ASC
-        LIMIT 5
-    ''',
-      [provinsi, kabupaten, kecamatan],
-    );
-  }
-
   /// Mengambil semua detail dari tabel 'kapasitas' berdasarkan lokasi_id.
   Future<Map<String, dynamic>?> getKapasitasDetails(int lokasiId) async {
     final db = await database;
@@ -270,5 +201,113 @@ class DatabaseHelper {
       limit: 1,
     );
     return result.isNotEmpty ? result.first : null;
+  }
+
+  // --- FUNGSI REKOMENDASI DENGAN HIRARKI PERINGKAT LENGKAP ---
+
+  /// **[Saat-Bencana]** Merekomendasikan 3 kecamatan teraman untuk evakuasi.
+  /// Logika: Dirangking secara hierarkis berdasarkan silsilah Kerentanan, dari atas ke bawah.
+  Future<List<Map<String, dynamic>>> getEvacuationRecommendation(
+    String bencana,
+    String provinsi,
+    String kabupaten,
+    String kecamatan,
+  ) async {
+    final db = await database;
+    return await db.rawQuery(
+      '''
+      SELECT 
+        l.id, l.kecamatan, 
+        k.kelas_risiko, k.kelas_kerentanan, k.kelas_penduduk_terpapar,
+        k.total_penduduk_terpapar, k.penduduk_miskin, k.penduduk_cacat
+      FROM kerentanan k
+      JOIN lokasi l ON l.id = k.lokasi_id
+      WHERE 
+        l.provinsi = ? AND l.kabupaten = ? AND l.kecamatan != ? AND l.bencana = ?
+      ORDER BY 
+        -- Level 1 (Puncak Silsilah): Prioritaskan Kelas Risiko TERENDAH
+        CASE k.kelas_risiko WHEN 'RENDAH' THEN 1 WHEN 'SEDANG' THEN 2 WHEN 'TINGGI' THEN 3 ELSE 4 END ASC,
+        -- Level 2: Prioritaskan Kelas Kerentanan keseluruhan TERENDAH
+        CASE k.kelas_kerentanan WHEN 'RENDAH' THEN 1 WHEN 'SEDANG' THEN 2 WHEN 'TINGGI' THEN 3 ELSE 4 END ASC,
+        -- Level 3: Prioritaskan Kelas Penduduk Terpapar TERENDAH
+        CASE k.kelas_penduduk_terpapar WHEN 'RENDAH' THEN 1 WHEN 'SEDANG' THEN 2 WHEN 'TINGGI' THEN 3 ELSE 4 END ASC,
+        -- Level 4 (Ujung Silsilah Sosial): Prioritaskan Total Penduduk Terpapar numerik TERENDAH
+        k.total_penduduk_terpapar ASC,
+        -- Tie-breaker tambahan untuk aspek sosial
+        k.penduduk_miskin ASC,
+        k.penduduk_cacat ASC,
+        -- Tie-breaker untuk aspek lain (Fisik, Ekonomi, Lingkungan)
+        k.total_kerugian_fisik_dan_ekonomi ASC,
+        k.kerusakan_lingkungan_total ASC
+      LIMIT 3
+    ''',
+      [provinsi, kabupaten, kecamatan, bencana],
+    );
+  }
+
+  /// **[Pasca-Bencana]** [Mode A]: Mencari kecamatan prioritas rehabilitasi.
+  /// Logika: Dirangking secara hierarkis berdasarkan silsilah Kapasitas, dari atas ke bawah.
+  Future<List<Map<String, dynamic>>> getLowestCapacityKecamatan(
+    String bencana,
+    String provinsi,
+    String kabupaten,
+  ) async {
+    final db = await database;
+    return await db.rawQuery(
+      '''
+        SELECT 
+          l.id, l.kecamatan, cap.kelas_risiko, cap.kelas_kapasitas, cap.indeks_kapasitas,
+          cap.skor_kabupaten_kota, cap.nilai_ikd_kabupaten_kota, cap.skor_provinsi, cap.nilai_ikd_provinsi
+        FROM kapasitas cap
+        JOIN lokasi l ON l.id = cap.lokasi_id
+        WHERE l.bencana = ? AND l.provinsi = ? AND l.kabupaten = ?
+        ORDER BY 
+          -- Level 1 (Puncak Silsilah): Prioritaskan Kelas Risiko TERTINGGI
+          CASE cap.kelas_risiko WHEN 'TINGGI' THEN 1 WHEN 'SEDANG' THEN 2 WHEN 'RENDAH' THEN 3 ELSE 4 END ASC,
+          -- Level 2: Prioritaskan Kelas Kapasitas TERENDAH
+          CASE cap.kelas_kapasitas WHEN 'RENDAH' THEN 1 WHEN 'SEDANG' THEN 2 WHEN 'TINGGI' THEN 3 ELSE 4 END ASC,
+          -- Level 3: Prioritaskan Indeks Kapasitas numerik TERENDAH
+          cap.indeks_kapasitas ASC,
+          -- Level 4: Prioritaskan Skor Kab/Kota TERENDAH
+          cap.skor_kabupaten_kota ASC,
+          -- Level 5 (Ujung Silsilah): Prioritaskan Nilai IKD Kab/Kota TERENDAH
+          cap.nilai_ikd_kabupaten_kota ASC
+        LIMIT 5
+    ''',
+      [bencana, provinsi, kabupaten],
+    );
+  }
+
+  /// **[Pasca-Bencana]** [Mode B]: Mencari bencana paling berisiko di suatu lokasi.
+  /// Logika: Dirangking secara hierarkis berdasarkan silsilah Kapasitas, dari atas ke bawah.
+  Future<List<Map<String, dynamic>>> getBencanaByLowestCapacity(
+    String provinsi,
+    String kabupaten,
+    String kecamatan,
+  ) async {
+    final db = await database;
+    return await db.rawQuery(
+      '''
+        SELECT 
+          l.id, l.bencana, cap.kelas_risiko, cap.kelas_kapasitas, cap.indeks_kapasitas,
+          cap.skor_kabupaten_kota, cap.nilai_ikd_kabupaten_kota, cap.skor_provinsi, cap.nilai_ikd_provinsi
+        FROM kapasitas cap
+        JOIN lokasi l ON l.id = cap.lokasi_id
+        WHERE l.provinsi = ? AND l.kabupaten = ? AND l.kecamatan = ?
+        ORDER BY 
+          -- Level 1 (Puncak Silsilah): Prioritaskan Kelas Risiko TERTINGGI
+          CASE cap.kelas_risiko WHEN 'TINGGI' THEN 1 WHEN 'SEDANG' THEN 2 WHEN 'RENDAH' THEN 3 ELSE 4 END ASC,
+          -- Level 2: Prioritaskan Kelas Kapasitas TERENDAH
+          CASE cap.kelas_kapasitas WHEN 'RENDAH' THEN 1 WHEN 'SEDANG' THEN 2 WHEN 'TINGGI' THEN 3 ELSE 4 END ASC,
+          -- Level 3: Prioritaskan Indeks Kapasitas numerik TERENDAH
+          cap.indeks_kapasitas ASC,
+          -- Level 4: Prioritaskan Skor Kab/Kota TERENDAH
+          cap.skor_kabupaten_kota ASC,
+          -- Level 5 (Ujung Silsilah): Prioritaskan Nilai IKD Kab/Kota TERENDAH
+          cap.nilai_ikd_kabupaten_kota ASC
+        LIMIT 5
+    ''',
+      [provinsi, kabupaten, kecamatan],
+    );
   }
 }

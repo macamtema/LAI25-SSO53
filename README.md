@@ -1,5 +1,7 @@
 # Membangun Sistem Rekomendasi Fase Bencana dengan Flutter & Python
 
+## Project Manager: Tema Anggara (A704YBM480)
+
 Dokumen ini merinci proses pembangunan aplikasi seluler "Sistem Rekomendasi Rencana Fase Bencana", sebuah alat pendukung keputusan yang dirancang untuk bekerja secara offline dengan model AI di perangkat.
 
 ### Abstrak Proyek
@@ -30,7 +32,7 @@ Bagian ini mencakup semua proses yang dilakukan di lingkungan Python untuk menyi
 
 Langkah pertama adalah mengubah data mentah dari beberapa file CSV menjadi satu file database SQLite yang terstruktur dan ternormalisasi. Ini memastikan data menjadi portabel, efisien untuk di-query, dan siap digunakan oleh aplikasi.
 
-_(Gunakan skrip Python pertama yang Anda buat untuk mengonversi `bahaya.csv`, `kerentanan.csv`, dan `kapasitas.csv` menjadi satu file `data.db` dengan tabel `lokasi`, `bahaya`, `kerentanan`, dan `kapasitas`.)_
+_(Gunakan create_db.ipynb untuk mengonversi `bahaya.csv`, `kerentanan.csv`, dan `kapasitas.csv` menjadi satu file `data.db` dengan tabel `lokasi`, `bahaya`, `kerentanan`, dan `kapasitas`.)_
 
 ### Langkah 1.2: Membangun Model AI untuk Pra-Bencana
 
